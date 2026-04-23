@@ -1,0 +1,65 @@
+version: 2
+
+sources:
+  - name: salesforce
+    description: "Salesforce CRM source — opportunities and accounts."
+    database: raw
+    schema: salesforce
+    tables:
+      - name: raw_sfdc_opportunity
+        description: "Raw opportunity data containing contract terms and sales closure details."
+        columns:
+          - name: opportunity_id
+            tests:
+              - unique
+              - not_null
+
+      - name: raw_sfdc_account
+        description: "Raw account data defining customer segments and regions."
+        columns:
+          - name: account_id
+            tests:
+              - unique
+              - not_null
+
+models:
+  - name: stg_sfdc_opportunities
+    description: "Renamed and recast Salesforce opportunities. One record per opportunity."
+    columns:
+      - name: opportunity_id
+        description: "Primary key."
+        tests:
+          - unique
+          - not_null
+      - name: crm_account_id
+        description: "Foreign Key to Accounts table."
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_sfdc_accounts')
+                field: account_id
+      - name: total_contract_value
+        description: "Total Contract Value in USD. Reflects full term value for multi-year deals, not annual amount."
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+
+  - name: stg_sfdc_accounts
+    description: "Renamed Salesforce accounts. One record per account."
+    columns:
+      - name: account_id
+        description: "Primary key."
+        tests:
+          - unique
+          - not_null
+      - name: segment
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['SMB', 'Mid-Market', 'Large Enterprise']
+      - name: region
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['AMER', 'EMEA', 'APAC']

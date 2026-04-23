@@ -1,0 +1,51 @@
+version: 2
+
+models:
+  - name: int_opportunity_subscription_matched
+    description: >
+      Joins Salesforce opportunities to Zuora subscriptions.
+      LEFT JOIN preserves orphaned opportunities with null subscription columns.
+      Calculates crm_expected_mrr, mrr_variance, term_variance_months,
+      and days_to_billing_start.
+    columns:
+      - name: opportunity_id
+        description: "Primary key. One record per Salesforce opportunity."
+        tests:
+          - unique
+          - not_null
+
+  - name: int_opportunity_subscription_reconciled
+    description: >
+      Applies all reconciliation business logic to the matched intermediate.
+      Derives data quality flags, reconciliation_status, data_quality_severity,
+      and annual_financial_impact. Single source of truth for reconciliation rules.
+      All finance fact tables read from this model independently to enable
+      parallel builds.
+    columns:
+      - name: opportunity_id
+        description: "Primary key."
+        tests:
+          - unique
+          - not_null
+      - name: reconciliation_status
+        description: "{{ doc('reconciliation_status') }}"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                - 'Matched'
+                - 'Missing Subscription'
+                - 'Zombie Subscription'
+                - 'MRR Mismatch'
+                - 'Date Slip'
+                - 'Term Mismatch'
+              config:
+                severity: warn
+      - name: data_quality_severity
+        description: "{{ doc('data_quality_severity') }}"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['Critical', 'High', 'Medium', 'Low', 'None']

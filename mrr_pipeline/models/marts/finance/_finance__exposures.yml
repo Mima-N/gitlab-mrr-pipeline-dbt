@@ -1,0 +1,33 @@
+version: 2
+
+exposures:
+  - name: mrr_reconciliation_dashboard
+    type: dashboard
+    maturity: high
+    description: "Executive dashboard for CRM-to-billing reconciliation health and financial impact."
+    depends_on:
+      - ref('fct_opportunity_subscription_reconciliation')
+      - ref('fct_zombie_subscriptions')
+      - ref('dim_accounts')
+    owner:
+      name: Finance Team
+
+  - name: mrr_revenue_dashboard
+    type: dashboard
+    maturity: high
+    description: "Monthly MRR and ARR trend with clean vs at-risk revenue split."
+    depends_on:
+      - ref('fct_mrr_snapshot_monthly')
+      - ref('dim_accounts')
+    owner:
+      name: Finance Team
+
+  - name: zombie_subscription_alert
+    type: analysis
+    maturity: medium
+    description: "Daily Revenue Operations alert for active zombie subscriptions and leakage amounts."
+    depends_on:
+      - ref('fct_zombie_subscriptions')
+    owner:
+      name: Revenue Operations
+

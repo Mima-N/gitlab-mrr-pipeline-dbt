@@ -1,0 +1,100 @@
+version: 2
+
+models:
+  - name: fct_opportunity_subscription_reconciliation
+    description: >
+      One record per Salesforce opportunity. Surfaces every CRM-to-billing
+      discrepancy with reconciliation_status, data_quality_severity, and
+      annual_financial_impact. Primary model for Revenue Operations triage.
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: >
+            (data_quality_severity = 'Critical'
+              AND (is_zombie_subscription OR is_orphaned_opportunity))
+            OR data_quality_severity != 'Critical'
+    columns:
+      - name: reconciliation_id
+        description: "Surrogate primary key."
+        tests:
+          - unique
+          - not_null
+      - name: opportunity_id
+        description: "Natural key."
+        tests:
+          - unique
+          - not_null
+      - name: reconciliation_status
+        description: "{{ doc('reconciliation_status') }}"
+      - name: annual_financial_impact
+        description: "The dollar value of the discrepancy. Represents potential revenue leakage. Zero for Matched records."
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: days_to_billing_start
+        description: "Operational metric. Days elapsed between Deal Close and Subscription Start."
+
+  - name: fct_mrr_snapshot_monthly
+    description: >
+      One record per active subscription per report month.
+      Rolling 24-month window controlled by var mrr_lookback_months.
+      Carries reconciliation context for clean vs at-risk MRR analysis.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - subscription_id
+            - report_month
+    columns:
+      - name: mrr_snapshot_id
+        description: "Surrogate primary key. Hash of subscription_id and report_month."
+        tests:
+          - unique
+          - not_null
+      - name: report_month
+        description: "First day of the reporting month."
+        tests:
+          - not_null
+      - name: mrr_amount
+        description: "Recognized Monthly Recurring Revenue for this specific month."
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: reconciliation_status
+        description: "{{ doc('reconciliation_status') }}"
+
+  - name: fct_subscription_mrr
+    description: >
+      One record per subscription with a corresponding Zuora record.
+      Excludes orphaned opportunities. Clean view of portfolio MRR and ARR.
+    columns:
+      - name: subscription_id
+        description: "Primary key."
+        tests:
+          - unique
+          - not_null
+      - name: subscription_status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['Active', 'Canceled']
+
+  - name: fct_zombie_subscriptions
+    description: >
+      Churned in Salesforce but still active in Zuora. One record per zombie
+      subscription. Calculates days_billing_after_churn and total_revenue_leaked
+      for Finance and RevOps remediation.
+    columns:
+      - name: subscription_id
+        description: "Primary key."
+        tests:
+          - unique
+          - not_null
+      - name: monthly_revenue_leakage
+        description: "MRR incorrectly billed each month."
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: total_revenue_leaked
+        description: "Total revenue incorrectly collected since churn date."
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"

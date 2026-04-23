@@ -1,0 +1,47 @@
+version: 2
+
+sources:
+  - name: zuora
+    description: "Zuora billing source — subscription records."
+    database: raw
+    schema: zuora
+    tables:
+      - name: raw_zuora_subscription
+        description: >
+          Raw Zuora subscription records. One record per subscription.
+          Source data contains variances used for reconciliation
+          testing: date slips, price variances, zombie subscriptions, and
+          early cancellations.
+        columns:
+          - name: subscription_id
+            tests:
+              - unique
+              - not_null
+
+models:
+  - name: stg_zuora_subscriptions
+    description: "Renamed and recast Zuora subscriptions. One record per subscription."
+    columns:
+      - name: subscription_id
+        description: "Primary key."
+        tests:
+          - unique
+          - not_null
+      - name: sfdc_opportunity_id
+        description: "Renamed from crm_opportunity_id. Foreign key to stg_sfdc_opportunities."
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_sfdc_opportunities')
+                field: opportunity_id
+      - name: mrr_amount
+        description: "Monthly Recurring Revenue in USD. Calculated as billed_amount / contract_term_months."
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: subscription_status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['Active', 'Canceled']

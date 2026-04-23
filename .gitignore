@@ -1,0 +1,14 @@
+# Python & Data
+venv/
+__pycache__/
+*.csv
+**/*.csv
+
+# dbt
+**/target/
+**/dbt_packages/
+**/dbt_modules/
+**/logs/
+
+# OS
+.DS_Store

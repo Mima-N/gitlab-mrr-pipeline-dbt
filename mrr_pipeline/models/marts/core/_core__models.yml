@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: dim_accounts
+    description: "One record per Salesforce account. Provides segment and region for revenue analysis."
+    columns:
+      - name: account_id
+        description: "Primary key."
+        tests:
+          - unique
+          - not_null
+      - name: segment
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['SMB', 'Mid-Market', 'Large Enterprise']
+      - name: region
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['AMER', 'EMEA', 'APAC']
