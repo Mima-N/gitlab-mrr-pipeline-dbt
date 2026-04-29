@@ -1,0 +1,109 @@
+name: dbt CI Pipeline
+
+on:
+  # Only run on Pull Requests to save compute credits
+  pull_request:
+    branches:
+      - main
+    # Trigger if any core dbt files change
+    paths:
+      - 'mrr_pipeline/models/**'
+      - 'mrr_pipeline/macros/**'
+      - 'mrr_pipeline/tests/**'
+      - 'mrr_pipeline/dbt_project.yml'
+
+  # Allows manual triggering from the GitHub UI
+  workflow_dispatch:
+
+jobs:
+  build_and_test:
+    name: Build, Test, and Document
+    runs-on: ubuntu-latest
+
+    # Essential for your subfolder structure
+    defaults:
+      run:
+        working-directory: ./mrr_pipeline
+
+    # Dynamic ephemeral schema creation based on the Git commit hash
+    env:
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+      SNOWFLAKE_DATABASE: ANALYTICS
+      SNOWFLAKE_SCHEMA: CI_${{ github.sha }}
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-python311-dbt-snowflake-1.10.2
+
+      - name: Install dbt-snowflake (Strict Local Parity)
+        working-directory: ./
+        run: pip install dbt-snowflake==1.10.2
+
+      - name: Write profiles.yml
+        run: |
+          mkdir -p ~/.dbt
+          cat <<EOF > ~/.dbt/profiles.yml
+          mrr_pipeline:
+            target: ci
+            outputs:
+              ci:
+                type: snowflake
+                account: $SNOWFLAKE_ACCOUNT
+                user: $SNOWFLAKE_USER
+                password: $SNOWFLAKE_PASSWORD
+                role: $SNOWFLAKE_ROLE
+                database: $SNOWFLAKE_DATABASE
+                warehouse: $SNOWFLAKE_WAREHOUSE
+                schema: $SNOWFLAKE_SCHEMA
+                threads: 4
+                client_session_keep_alive: false
+          EOF
+
+      - name: Validate Snowflake connection
+        run: dbt debug
+
+      - name: Install dbt packages
+        run: dbt deps
+
+      - name: Run Pipeline Models and Tests
+        run: dbt build --full-refresh
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-artifacts-failure-${{ github.sha }}
+          path: |
+            mrr_pipeline/target/compiled/
+            mrr_pipeline/target/run_results.json
+          retention-days: 7
+
+      - name: Generate dbt docs
+        if: success()
+        run: dbt docs generate
+
+      - name: Upload dbt docs on success
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-docs-${{ github.sha }}
+          path: |
+            mrr_pipeline/target/catalog.json
+            mrr_pipeline/target/manifest.json
+            mrr_pipeline/target/index.html
+          retention-days: 30
